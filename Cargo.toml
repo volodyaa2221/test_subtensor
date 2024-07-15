@@ -1,0 +1,11 @@
+[package]
+name = "test_subtensor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+num-traits = "0.2.19"
+regex = "1.10.5"
+sp-runtime = "38.0.0"
+sp-std = "14.0.0"
+substrate-fixed = { git = "https://github.com/encointer/substrate-fixed.git", tag = "v0.5.9" }
