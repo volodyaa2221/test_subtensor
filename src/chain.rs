@@ -11,7 +11,7 @@ pub async fn get_subnetwork_n(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, ne
     let storage_value:Option<u16> = match api.get_storage_map ("SubtensorModule", "SubnetworkN", netuid, None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get subnetwork size {:?}", e);
+            log::error!("Can't get subnetwork size: {:?}", e);
             return 0;
         }
     };
@@ -24,7 +24,7 @@ pub async fn get_current_block_number(api: &Api<AssetRuntimeConfig, JsonrpseeCli
     let storage_value:Option<u32> = match api.get_storage("System", "Number", None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get current block  number {:?}", e);
+            log::error!("Can't get current block number: {:?}", e);
             return 0;
         }
     };
@@ -38,7 +38,7 @@ pub async fn get_activity_cutoff(api: &Api<AssetRuntimeConfig, JsonrpseeClient>,
     let storage_value:Option<u16> = match api.get_storage_map ("SubtensorModule", "ActivityCutoff", netuid, None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get activity cutoff {:?}", e);
+            log::error!("Can't get activity cutoff: {:?}", e);
             return 0;
         }
     };
@@ -52,7 +52,7 @@ pub async fn get_last_update (api: &Api<AssetRuntimeConfig, JsonrpseeClient>, ne
     let storage_value:Option<Vec<u64>> = match api.get_storage_map ("SubtensorModule", "LastUpdate", netuid, None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get last update {:?}", e);
+            log::error!("Can't get last update: {:?}", e);
             return vec![];
         }
     };
@@ -78,7 +78,7 @@ pub async fn get_neuron_block_at_registration(api: &Api<AssetRuntimeConfig, Json
     let storage_value:Option<u64> = match api.get_storage_double_map ("SubtensorModule", "BlockAtRegistration", netuid, neuron_uid, None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get block at registration {:?}", e);
+            log::error!("Can't get block at registration: {:?}", e);
             return 0;
         }
     };
@@ -112,7 +112,7 @@ pub async fn get_total_stake_for_hotkey(api: &Api<AssetRuntimeConfig, JsonrpseeC
     let storage_value:Option<u64> = match api.get_storage_map ("SubtensorModule", "TotalHotkeyStake", hotkey,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get total stake for hotkey {:?}", e);
+            log::error!("Can't get total stake for hotkey: {:?}", e);
             return 0;
         }
     };
@@ -126,7 +126,7 @@ pub async fn get_validator_permit(api: &Api<AssetRuntimeConfig, JsonrpseeClient>
     let storage_value:Option<Vec<bool>> = match api.get_storage_map ("SubtensorModule", "ValidatorPermit", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get validator permit {:?}", e);
+            log::error!("Can't get validator permit: {:?}", e);
             return vec![];
         }
     };
@@ -140,7 +140,7 @@ pub async fn get_max_allowed_validators(api: &Api<AssetRuntimeConfig, JsonrpseeC
     let storage_value:Option<u16> = match api.get_storage_map ("SubtensorModule", "MaxAllowedValidators", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get MaxAllowedValidators {:?}", e);
+            log::error!("Can't get MaxAllowedValidators: {:?}", e);
             return 0;
         }
     };
@@ -210,7 +210,7 @@ pub async fn get_kappa(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, netuid: u
     let storage_value:Option<u16> = match api.get_storage_map ("SubtensorModule", "Kappa", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get Kappa {:?}", e);
+            log::error!("Can't get Kappa: {:?}", e);
             return 0;
         }
     };
@@ -224,7 +224,7 @@ pub async fn get_liquid_alpha_on(api: &Api<AssetRuntimeConfig, JsonrpseeClient>,
     let storage_value:Option<bool> = match api.get_storage_map ("SubtensorModule", "LiquidAlphaOn", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get LiquidAlphaOn {:?}", e);
+            log::error!("Can't get LiquidAlphaOn {:?}", e);
             return false;
         }
     };
@@ -238,7 +238,7 @@ pub async fn get_bonds_moving_average (api: &Api<AssetRuntimeConfig, JsonrpseeCl
     let storage_value:Option<u64> = match api.get_storage_map ("SubtensorModule", "BondsMovingAverage", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get LiquidAlphaOn {:?}", e);
+            log::error!("Can't get LiquidAlphaOn {:?}", e);
             return 0;
         }
     };
@@ -252,7 +252,7 @@ pub async fn get_alpha_values (api: &Api<AssetRuntimeConfig, JsonrpseeClient>, n
     let storage_value:Option<(u16, u16)> = match api.get_storage_map ("SubtensorModule", "AlphaValues", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            println!("Can't get LiquidAlphaOn {:?}", e);
+            log::error!("Can't get LiquidAlphaOn {:?}", e);
             return (0,0);
         }
     };

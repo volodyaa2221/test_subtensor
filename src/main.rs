@@ -23,12 +23,13 @@ const NET_UID: u16 = 8;
 #[tokio::main]
 async fn main() {
 
+    env_logger::init();
     let client = JsonrpseeClient::with_default_url().await.unwrap();
 	let api = Api::<AssetRuntimeConfig, _>::new(client).await.unwrap();
     
     // Get subnetwork size.
-    let n = get_subnetwork_n(&api, NET_UID).await;
-    println!("Subnetwork Size : {:?}", n);
+    let n: u16 = get_subnetwork_n(&api, NET_UID).await;
+    log::trace!("Number of Neurons in Network: {:?}", n);
 
     // ======================
     // == Active & updated ==
@@ -36,58 +37,47 @@ async fn main() {
 
     // Get current block.
     let current_block: u64 = get_current_block_number(&api).await;
-    println!("current_block: {:?}", current_block);
+    log::trace!("current_block: {:?}", current_block);
 
     // Get activity cutoff.
-    let activity_cutoff = get_activity_cutoff(&api, NET_UID).await;
-    println!("activity_cutoff: {:?}", activity_cutoff);
+    let activity_cutoff: u64 = get_activity_cutoff(&api, NET_UID).await;
+    log::trace!("activity_cutoff: {:?}", activity_cutoff);
 
     // Last update vector.
     let last_update: Vec<u64> = get_last_update(&api, NET_UID).await;
-    // println!("Last update: {:?}", &last_update);
+    log::trace!("Last update: {:?}", &last_update);
 
     // Inactive mask.
     let inactive: Vec<bool> = last_update
-    .iter()
-    .map(|updated| updated.saturating_add(activity_cutoff) < current_block)
-    .collect();
+        .iter()
+        .map(|updated| updated.saturating_add(activity_cutoff) < current_block)
+        .collect();
+    log::trace!("Inactive: {:?}", inactive.clone());
 
-    // Logical negation of inactive. active
-    let _: Vec<bool> = inactive.iter().map(|&b| !b).collect();
+    // Logical negation of inactive.
+    let _active: Vec<bool> = inactive.iter().map(|&b| !b).collect();
 
     // Block at registration vector (block when each neuron was most recently registered).
     let block_at_registration: Vec<u64> = get_block_at_registration(&api, NET_UID, n).await;
-    println!("Block at registration: {:?}", &block_at_registration);
-
-    // Outdated matrix, updated_ij=True if i has last updated (weights) after j has last registered. outdated
-    let _: Vec<Vec<bool>> = last_update
-        .iter()
-        .map(|updated| {
-            block_at_registration
-                .iter()
-                .map(|registered| updated <= registered)
-                .collect()
-        })
-        .collect();
-    // println!("Outdated:\n{:?}\n", &outdated);
+    log::trace!("Block at registration: {:?}", &block_at_registration);
 
     // ===========
     // == Stake ==
     // ===========
 
-    let hotkeys: Vec<(u16, AccountId)> = get_keys(&api, NET_UID).await;    
-    // println!("hotkeys: {:?}", &hotkeys);
+    let hotkeys: Vec<(u16, AccountId)> = get_keys(&api, NET_UID).await;
+    log::trace!("hotkeys: {:?}", &hotkeys);
 
     // Access network stake as normalized vector.
     let mut stake_64: Vec<I64F64> = vec![I64F64::from_num(0.0); n as usize];
     for (uid_i, hotkey) in &hotkeys {
         stake_64[*uid_i as usize] = I64F64::from_num(get_total_stake_for_hotkey(&api, hotkey).await);
     }
-    println!("Stake : {:?}", &stake_64);
+    log::trace!("Stake : {:?}", &stake_64);
     inplace_normalize_64(&mut stake_64);
     let stake: Vec<I32F32> = vec_fixed64_to_fixed32(stake_64);
     // range: I32F32(0, 1)
-    println!("Normalised Stake: {:?}", &stake);    
+    log::trace!("Normalised Stake: {:?}", &stake);
 
     // =======================
     // == Validator permits ==
@@ -95,18 +85,18 @@ async fn main() {
 
     // Get current validator permits.
     let validator_permits: Vec<bool> = get_validator_permit(&api, NET_UID).await;
-    println!("validator_permits: {:?}", validator_permits);
+    log::trace!("validator_permits: {:?}", validator_permits);
 
     // Logical negation of validator_permits.
     let validator_forbids: Vec<bool> = validator_permits.iter().map(|&b| !b).collect();
 
     // Get max allowed validators.
     let max_allowed_validators: u16 = get_max_allowed_validators(&api, NET_UID).await;
-    println!("max_allowed_validators: {:?}", max_allowed_validators);
+    log::trace!("max_allowed_validators: {:?}", max_allowed_validators);
 
     // Get new validator permits.
     let new_validator_permits: Vec<bool> = is_topk(&stake, max_allowed_validators as usize);
-    println!("new_validator_permits: {:?}", new_validator_permits);
+    log::trace!("new_validator_permits: {:?}", new_validator_permits);
 
     // ==================
     // == Active Stake ==
@@ -122,16 +112,7 @@ async fn main() {
 
     // Normalize active stake.
     inplace_normalize(&mut active_stake);
-    println!("Active Stake:\n{:?}\n", &active_stake);
-
-    // println!("Active Stake Total Sum:{:?}", active_stake.iter().sum::<I32F32>());
-
-    // let mut stake_idx_list = Vec::new();
-    // for (index, stake) in active_stake.iter().enumerate() {
-    //     if  *stake > I32F32::from_num(0) {
-    //         stake_idx_list.push(index);
-    //     }
-    // }
+    log::trace!("Active Stake:\n{:?}\n", &active_stake);
 
     // =============
     // == Weights ==
@@ -139,15 +120,15 @@ async fn main() {
 
     // Access network weights row unnormalized.
     let mut weights: Vec<Vec<(u16, I32F32)>> = get_weights(&api, NET_UID, n).await;
-    println!("Weights: {:?}", &weights);
+    log::trace!("Weights: {:?}", &weights);
 
     // Mask weights that are not from permitted validators.
     weights = mask_rows_sparse(&validator_forbids, &weights);
-    println!("Weights (permit): {:?}", &weights);
+    log::trace!("Weights (permit): {:?}", &weights);
 
     // Remove self-weight by masking diagonal.
     weights = mask_diag_sparse(&weights);
-    println!("Weights (permit+diag): {:?}", &weights);
+    log::trace!("Weights (permit+diag): {:?}", &weights);
 
     // Remove weights referring to deregistered neurons.
     weights = vec_mask_sparse_matrix(
@@ -156,11 +137,11 @@ async fn main() {
         &block_at_registration,
         &|updated, registered| updated <= registered,
     );
-    println!("Weights (permit+diag+outdate): {:?}", &weights);
+    log::trace!("Weights (permit+diag+outdate): {:?}", &weights);
 
     // Normalize remaining weights.
     inplace_row_normalize_sparse(&mut weights);
-    println!("Weights (mask+norm): {:?}", &weights);
+    log::trace!("Weights (mask+norm): {:?}", &weights);
 
     // ================================
     // == Consensus, Validator Trust ==
@@ -168,35 +149,18 @@ async fn main() {
 
     // Compute preranks: r_j = SUM(i) w_ij * s_i
     let preranks: Vec<I32F32> = matmul_sparse(&weights, &active_stake, n);
-    println!("Ranks (before): {:?}", &preranks);    
+    log::trace!("Ranks (before): {:?}", &preranks);
 
     // Clip weights at majority consensus
     let kappa: I32F32 = get_float_kappa(&api, NET_UID).await; // consensus majority ratio, e.g. 51%.
     let consensus: Vec<I32F32> = weighted_median_col_sparse(&active_stake, &weights, n, kappa);
-    println!("Consensus: {:?}", &consensus);
+    log::trace!("Consensus: {:?}", &consensus);
 
     weights = col_clip_sparse(&weights, &consensus);
-    println!("Weights: {:?}", &weights);
+    log::trace!("Weights: {:?}", &weights);
 
     let validator_trust: Vec<I32F32> = row_sum_sparse(&weights);
-    println!("Validator Trust: {:?}", &validator_trust);
-
-    // println!("-----------------Weights-------------");    
-    // let mut weights = parse_weights_from_file("debugging_logs/weight_6_final.txt");    
-
-    // let weight_delta: f32 = 1_f32/ (stake_idx_list.len() as f32);
-    // for index in stake_idx_list {
-    //     weights[index].push((DEBUG_UID as u16, I32F32::from_num(weight_delta)));
-    // }
-
-    // let mut sum_weights: Vec<I32F32> = vec![I32F32::from_num(0.0); weights.len()];
-    // for (_, vec) in weights.iter().enumerate()  {
-    //     for (uid, value ) in vec {
-    //         sum_weights[*uid as usize] += value;
-    //     }
-    // }
-    // println!("Weight For UID {:?} Sum {:?}", DEBUG_UID, sum_weights[DEBUG_UID]);
-    // println!("Weight Total Sum {:?}", sum_weights.iter().sum::<I32F32>());
+    log::trace!("Validator Trust: {:?}", &validator_trust);
 
     // =============================
     // == Ranks, Trust, Incentive ==
@@ -204,19 +168,15 @@ async fn main() {
 
     // Compute ranks: r_j = SUM(i) w_ij * s_i.
     let mut ranks: Vec<I32F32> = matmul_sparse(&weights, &active_stake, n);
-    println!("Ranks (after): {:?}", &ranks);
+    log::trace!("Ranks (after): {:?}", &ranks);
 
     // Compute server trust: ratio of rank after vs. rank before.
     let trust: Vec<I32F32> = vecdiv(&ranks, &preranks); // range: I32F32(0, 1)
-    println!("T: {:?}", &trust);
+    log::trace!("T: {:?}", &trust);
 
     inplace_normalize(&mut ranks); // range: I32F32(0, 1)
     let incentive: Vec<I32F32> = ranks.clone();
-    println!("Incentive (=Rank): {:?}", &incentive);
-
-    // println!("-----------------Incentive-------------");        
-    // println!("Incentive for UID {:?}: {:?}, Total Sum: {:?}", DEBUG_UID, incentive[DEBUG_UID], incentive.iter().sum::<I32F32>());
-    // // println!("{:?}", incentive);
+    log::trace!("Incentive (=Rank): {:?}", &incentive);
 
     // =========================
     // == Bonds and Dividends ==
@@ -224,7 +184,7 @@ async fn main() {
 
     // Access network bonds.
     let mut bonds: Vec<Vec<(u16, I32F32)>> = get_bonds(&api, NET_UID, n).await;
-    println!("B: {:?}", &bonds);
+    log::trace!("B: {:?}", &bonds);
 
     // Remove bonds referring to deregistered neurons.
     bonds = vec_mask_sparse_matrix(
@@ -233,73 +193,32 @@ async fn main() {
         &block_at_registration,
         &|updated, registered| updated <= registered,
     );
-    println!("B (outdatedmask): {:?}", &bonds);
+    log::trace!("B (outdatedmask): {:?}", &bonds);
 
     // Normalize remaining bonds: sum_i b_ij = 1.
     inplace_col_normalize_sparse(&mut bonds, n);
-    println!("B (mask+norm): {:?}", &bonds);
+    log::trace!("B (mask+norm): {:?}", &bonds);
 
     // Compute bonds delta column normalized.
     let mut bonds_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &active_stake); // ΔB = W◦S (outdated W masked)
-    println!("ΔB: {:?}", &bonds_delta);
+    log::trace!("ΔB: {:?}", &bonds_delta);
 
     // Normalize bonds delta.
     inplace_col_normalize_sparse(&mut bonds_delta, n); // sum_i b_ij = 1
-    println!("ΔB (norm): {:?}", &bonds_delta);
-   
+    log::trace!("ΔB (norm): {:?}", &bonds_delta);
+
     // Compute the Exponential Moving Average (EMA) of bonds.
-    let mut ema_bonds = 
-                        compute_ema_bonds_sparse(&api, NET_UID, consensus.clone(), bonds_delta, bonds).await;
+    let mut ema_bonds =
+            compute_ema_bonds_sparse(&api, NET_UID, consensus.clone(), bonds_delta, bonds).await;
     // Normalize EMA bonds.
     inplace_col_normalize_sparse(&mut ema_bonds, n); // sum_i b_ij = 1
-    println!("Exponential Moving Average Bonds: {:?}", &ema_bonds);
+    log::trace!("Exponential Moving Average Bonds: {:?}", &ema_bonds);
 
     // Compute dividends: d_i = SUM(j) b_ij * inc_j.
     // range: I32F32(0, 1)
     let mut dividends: Vec<I32F32> = matmul_transpose_sparse(&ema_bonds, &incentive);
     inplace_normalize(&mut dividends);
-    println!("Dividends: {:?}", &dividends);
-
-    // let mut sum_bonds_delta: Vec<I32F32> = vec![I32F32::from_num(0.0); bonds_delta.len()];
-    // for (_, vec) in bonds_delta.iter().enumerate() {
-    //     for (uid, value) in vec {
-    //         sum_bonds_delta[*uid as usize] += value;
-    //     }
-    // }
-    // println!("Bonds Delta For UID {:?} Sum {:?}", DEBUG_UID, sum_bonds_delta[DEBUG_UID]);
-    // println!("Bonds Delta Total Sum {:?}", sum_bonds_delta.iter().sum::<I32F32>());
-
-
-    // println!("-----------------EMA BONDS-------------");
-    // let ema_bonds = parse_weights_from_file("debugging_logs/bonds_6_ema.txt");
-    // // println!("index:\t incentive\tdividands");
-    // let mut sum_ema_bonds = I32F32::from_num(0);
-    // let mut ema_bonds_idx_list = Vec::new();
-    // for (index, vec) in ema_bonds.iter().enumerate()  {
-    //     // sum = I32F32::from_num(0);
-    //     for (uid, value) in vec {            
-    //         if *uid == DEBUG_UID as u16 {
-    //             ema_bonds_idx_list.push(index);
-    //             sum_ema_bonds += value;
-    //             println!("EMA Bond for UID {:?} Index:{:?}  Value:{:?}", DEBUG_UID, index, value);
-    //         }
-    //     }       
-    //     // println!("{:<10?}{:<15?}{:?}", index , incentive[index], dividends[index]);
-    // }
-    // println!("EMA Bonds Sum for UID {:?}: {:?}", DEBUG_UID, sum_ema_bonds);  
-
-    // println!("-----------------DIVIDENDS-------------");    
-    // let mut dividends_sum_included_uid: I32F32 = I32F32::from_num(0);
-    // // let dividends = parse_incentive_from_file("debugging_logs/dividends.txt");
-    // let mut dividends = matmul_transpose_sparse(&ema_bonds, &incentive);
-    // inplace_normalize(&mut dividends);    
-    // for index in ema_bonds_idx_list {
-    //     dividends_sum_included_uid += dividends[index];
-    //     println!("Dividend included UID  {:?} Index: {:?} , Value: {:?}", DEBUG_UID, index, dividends[index]);
-    // }        
-    // println!("Dividend Total Sum: {:?}, Sum Included UID {:?}: {:?}", dividends.iter().sum::<I32F32>(), DEBUG_UID, dividends_sum_included_uid);    
-    // println!("-----------------THE END-------------");
-
+    log::trace!("Dividends: {:?}", &dividends);
 
 }
 
@@ -575,11 +494,11 @@ pub async fn compute_ema_bonds_sparse(
         if (consensus_high > consensus_low) || consensus_high != 0 || consensus_low < 0 {
             // if (consensus_high > consensus_low) || consensus_high != 0) || consensus_low != 0 {
             // if (consensus_high > consensus_low) || consensus_low != 0 {
-            println!("Using Liquid Alpha");
+            log::trace!("Using Liquid Alpha");
 
             // Get the high and low alpha values for the network.
             let (alpha_low, alpha_high): (I32F32, I32F32) = get_alpha_values_32(api, netuid).await;
-            println!("alpha_low: {:?} alpha_high: {:?}", alpha_low, alpha_high);
+            log::trace!("alpha_low: {:?} alpha_high: {:?}", alpha_low, alpha_high);
 
             // Calculate the logistic function parameters 'a' and 'b' based on alpha and consensus values.
             let (a, b) = calculate_logistic_params(
@@ -602,13 +521,13 @@ pub async fn compute_ema_bonds_sparse(
                 clamped_alpha,
             )
         } else {
-            println!("Using Bonds Moving Average");
+            log::trace!("Using Bonds Moving Average");
 
             // Compute the EMA of bonds using a normal alpha value.
             compute_ema_bonds_normal_sparse(api,&bonds_delta, &bonds, netuid).await
         }
     } else {
-        println!("Using Bonds Moving Average");
+        log::trace!("Using Bonds Moving Average");
 
         // Compute the EMA of bonds using a normal alpha value.
         compute_ema_bonds_normal_sparse(api,&bonds_delta, &bonds, netuid).await
@@ -638,7 +557,7 @@ fn parse_incentive_from_file(file_path: &str) -> Vec<I32F32> {
     let input = match read_file_to_string(file_path) {
         Ok(result) => result,
         Err(e) => {
-            println!("Failed to read file: {:?}", e);
+            log::error!("Failed to read file: {:?}", e);
             return vec![];
         }
     };
@@ -655,7 +574,7 @@ fn parse_weights_from_file(file_path: &str) -> Vec<Vec<(u16, I32F32)>> {
     let input = match read_file_to_string(file_path) {
         Ok(result) => result,
         Err(e) => {
-            println!("Failed to read file: {:?}", e);
+            log::error!("Failed to read file: {:?}", e);
             return vec![];
         }
     };
