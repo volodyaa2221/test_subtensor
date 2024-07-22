@@ -251,9 +251,9 @@ async fn main() {
     //         }
     //     }
     // }           
-    for val in &bonds_delta[DEBUG_UID] {            
-        log::debug!("BONDS DELTA  {:?}", val);
-    }           
+    // for val in &bonds_delta[DEBUG_UID] {            
+        // log::debug!("BONDS DELTA  {:?}", val);
+    // }           
 
     // log::debug!("SUM Bonds Delta Index {:?}: {:?}", DEBUG_UID, &bonds_delta[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
 /*********************************************************************************************************************************/

@@ -152,20 +152,18 @@ pub async fn get_max_allowed_validators(api: &Api<AssetRuntimeConfig, JsonrpseeC
 pub async fn get_weights(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, netuid: u16, n: u16) -> Vec<Vec<(u16, I32F32)>> {
 
     let mut weights: Vec<Vec<(u16, I32F32)>> = vec![vec![]; n as usize];
-    let storage_double_map_key_prefix = api
-                                                        .get_storage_double_map_key_prefix("SubtensorModule", "Weights", netuid)
-                                                        .await
-                                                        .unwrap();
-    let double_map_storage_keys = api
-                                                        .get_storage_keys_paged(Some(storage_double_map_key_prefix), n as u32, None, None)
-                                                        .await
-                                                        .unwrap();
 
-    for (uid_i, storage_key) in double_map_storage_keys.iter().enumerate() {
+    for uid_i in 0..n {
 
-        let weights_i:  Vec<(u16, u16)> = api.get_storage_by_key(storage_key.clone(), None).await.unwrap().unwrap();
-
-        for (uid_j, weight_ij) in weights_i.iter().filter(|(uid_j, _)| *uid_j < n ) {
+        let weights_i:  Option<Vec<(u16, u16)>> = match api.get_storage_double_map("SubtensorModule", "Weights", netuid, uid_i, None).await {
+            Ok(result) => result,
+            Err(e) => {
+                log::error!("Can't get weights: {:?}", e);
+                continue;
+            }
+        };
+        
+        for (uid_j, weight_ij) in weights_i.unwrap_or(vec![]).iter().filter(|(uid_j, _)| *uid_j < n ) {
             weights
                 .get_mut(uid_i as usize)
                 .expect("uid_i is filtered to be less than n; qed")
@@ -180,24 +178,22 @@ pub async fn get_weights(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, netuid:
 pub async fn get_bonds(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, netuid: u16, n: u16) -> Vec<Vec<(u16, I32F32)>> {
 
     let mut bonds: Vec<Vec<(u16, I32F32)>> = vec![vec![]; n as usize];
-    let storage_double_map_key_prefix = api
-                                                        .get_storage_double_map_key_prefix("SubtensorModule", "Weights", netuid)
-                                                        .await
-                                                        .unwrap();
-    let double_map_storage_keys = api
-                                                        .get_storage_keys_paged(Some(storage_double_map_key_prefix), n as u32, None, None)
-                                                        .await
-                                                        .unwrap();
 
-    for (uid_i, storage_key) in double_map_storage_keys.iter().enumerate() {
+    for uid_i in 0..n {
 
-        let bonds_vec:  Vec<(u16, u16)> = api.get_storage_by_key(storage_key.clone(), None).await.unwrap().unwrap();
+        let bonds_vec:  Option<Vec<(u16, u16)>> = match api.get_storage_double_map("SubtensorModule", "Bonds", netuid, uid_i, None).await {
+            Ok(result) => result,
+            Err(e) => {
+                log::error!("Can't get Bonds: {:?}", e);
+                continue;
+            }
+        };
 
-        for (uid_j, bonds_ij) in bonds_vec {
+        for (uid_j, bonds_ij) in bonds_vec.unwrap_or(vec![]).iter().filter(|(uid_j, _)| *uid_j < n ) {
             bonds
                 .get_mut(uid_i as usize)
                 .expect("uid_i is filtered to be less than n; qed")
-                .push((uid_j, I32F32::from_num(bonds_ij)));
+                .push((*uid_j, I32F32::from_num(*bonds_ij)));
         }
     }
     
