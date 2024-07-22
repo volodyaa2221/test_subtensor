@@ -15,4 +15,3 @@ sp-runtime = "39.0.0"
 sp-std = "14.0.0"
 substrate-fixed = "0.5.9"
 substrate-api-client = "0.18.0"
-

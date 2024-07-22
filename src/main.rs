@@ -162,13 +162,16 @@ async fn main() {
 /************************************************DEBUG***************************************************************************/
    
     let weight_delta = get_weight_for_uid(DEBUG_UID, &weights, &active_stake, n);
+    let mut sum_sw: I32F32 = zero_num;
     for (index, row) in active_stake.iter().enumerate() {
         if *row > zero_num {
-            log::trace!("Active Stake index {:?}: {:?}", index, row);
+            sum_sw += *row * weight_delta;
+            log::trace!("Active Stake index {:?}: {:?} * {:?} = {:?}", index, row, weight_delta, *row*weight_delta);
             weights[index].push((DEBUG_UID as u16, weight_delta));
         }
     }
-    
+    log::debug!("Sum {:?} , {:?}", sum_sw, weight_delta-sum_sw);
+
     log::debug!("Weights list Index: {:?}", DEBUG_UID);
     for vec in &weights[DEBUG_UID] {            
         log::debug!("{:?}", vec);
@@ -226,12 +229,8 @@ async fn main() {
     log::trace!("B (mask+norm): {:?}", &bonds);
 /************************************************DEBUG***************************************************************************/
     // log::debug!("Bonds list Index : {:?}", DEBUG_UID);
-    // for (index, vec) in bonds.iter().enumerate() {            
-    //     for (uid, val) in vec {
-    //         if *uid as usize == DEBUG_UID {
-    //             log::debug!("BONDS : {:?} , {:?}", index, (uid, val));
-    //         }
-    //     }
+    // for val in &bonds[DEBUG_UID] {            
+    //     log::debug!("BONDS  {:?}", val);
     // }           
     // log::debug!("SUM Bonds Index {:?}: {:?}", DEBUG_UID, &bonds[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
 /*********************************************************************************************************************************/
@@ -244,7 +243,7 @@ async fn main() {
     inplace_col_normalize_sparse(&mut bonds_delta, n); // sum_i b_ij = 1
     log::trace!("ΔB (norm): {:?}", &bonds_delta);
 /************************************************DEBUG***************************************************************************/
-    // log::debug!("Bonds Delta list Index: {:?}", DEBUG_UID);
+    log::debug!("Bonds Delta list Index: {:?}", DEBUG_UID);
     // for (index, vec) in bonds_delta.iter().enumerate() {            
     //     for (uid, val) in vec {
     //         if *uid as usize == DEBUG_UID {
@@ -252,6 +251,10 @@ async fn main() {
     //         }
     //     }
     // }           
+    for val in &bonds_delta[DEBUG_UID] {            
+        log::debug!("BONDS DELTA  {:?}", val);
+    }           
+
     // log::debug!("SUM Bonds Delta Index {:?}: {:?}", DEBUG_UID, &bonds_delta[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
 /*********************************************************************************************************************************/
 
@@ -263,6 +266,13 @@ async fn main() {
     log::trace!("Exponential Moving Average Bonds: {:?}", &ema_bonds);
 /************************************************DEBUG***************************************************************************/
     log::debug!("EMA bonds list Index: {:?}", DEBUG_UID);
+    // for (index, vec) in ema_bonds.iter().enumerate() {            
+    //     for (uid, val) in vec {
+    //         if *uid as usize == DEBUG_UID {
+    //             log::debug!("EMA bond : {:?} , {:?}", index, (uid, val));
+    //         }
+    //     }
+    // }           
     for val in &ema_bonds[DEBUG_UID] {            
         log::debug!("EMA BONDS  {:?}", val);
     }           
@@ -277,12 +287,13 @@ async fn main() {
 }
 
 fn get_weight_for_uid(uid: usize, weights: &Vec<Vec<(u16, I32F32)>>, stake: &Vec<I32F32>, n: u16) -> I32F32 {
-    let ranks = matmul_sparse(&weights, &stake, n);
-    let stake_num = stake[uid];     
-    let sum_rank = ranks.iter().sum::<I32F32>();    
-    let weight =  stake_num.saturating_mul(sum_rank);
+    let ranks = matmul_sparse(&weights, &stake, n);    
+    let stake_num = stake[uid].to_bits();     
+    let sum_rank = ranks.iter().sum::<I32F32>().to_bits();         
+    let weight =   stake_num*sum_rank / (I32F32::from_num(1.0).to_bits()-stake_num);    
     log::debug!("-----------------{:?} * {:?} = {:?} ",stake_num, sum_rank, weight);
-    return weight;
+    log::debug!("-----------------{:?} * {:?} = {:?} ",I32F32::from_bits(stake_num), I32F32::from_bits(sum_rank), I32F32::from_bits(weight));
+    return I32F32::from_bits(weight);
 }
 
 async fn get_float_kappa(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, netuid: u16) -> I32F32 {
