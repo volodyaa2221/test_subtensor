@@ -160,23 +160,27 @@ async fn main() {
     log::trace!("Weights: {:?}", &weights);
 
 /************************************************DEBUG***************************************************************************/
-   
-    let weight_delta = get_weight_for_uid(DEBUG_UID, &weights, &active_stake, n);
-    let mut sum_sw: I32F32 = zero_num;
-    for (index, row) in active_stake.iter().enumerate() {
-        if *row > zero_num {
-            sum_sw += *row * weight_delta;
-            log::trace!("Active Stake index {:?}: {:?} * {:?} = {:?}", index, row, weight_delta, *row*weight_delta);
-            weights[index].push((DEBUG_UID as u16, weight_delta));
-        }
-    }
-    log::debug!("Sum {:?} , {:?}", sum_sw, weight_delta-sum_sw);
+    // log::debug!("Weights list Index: {:?}", DEBUG_UID);
+    // for vec in &weights[DEBUG_UID] {            
+    //     log::debug!("{:?}", vec);        
+    // }
+    // log::debug!("SUM Weights Index {:?}: {:?}, Count:{:?}", DEBUG_UID, &weights[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>(), &weights[DEBUG_UID].len());
 
-    log::debug!("Weights list Index: {:?}", DEBUG_UID);
-    for vec in &weights[DEBUG_UID] {            
-        log::debug!("{:?}", vec);
-    }           
-    log::debug!("SUM Weights Index {:?}: {:?}", DEBUG_UID, &weights[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
+    adjust_weights_for_uid(DEBUG_UID, &mut weights, &active_stake, n);
+    
+
+    // for (index, val) in active_stake.iter().enumerate() {
+    //     if *val > zero_num {
+    //         log::debug!("Active Stake: {:?}", (index, val));
+    //         // weights[index].push((DEBUG_UID as u16, weight_delta));
+    //     }
+    // }
+    // log::debug!("Sum Active Stake: {:?}", active_stake.iter().sum::<I32F32>());
+    // log::debug!("After adjust Weights list Index: {:?}", DEBUG_UID);
+    // for vec in &weights[DEBUG_UID] {            
+    //     log::debug!("{:?}", vec);        
+    // }
+    // log::debug!("SUM Weights Index {:?}: {:?}, Count:{:?}", DEBUG_UID, &weights[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>(), &weights[DEBUG_UID].len());
 /*********************************************************************************************************************************/
 
     let validator_trust: Vec<I32F32> = row_sum_sparse(&weights);
@@ -203,9 +207,8 @@ async fn main() {
     let incentive: Vec<I32F32> = ranks.clone();
     log::trace!("Incentive (=Rank): {:?}", &incentive);
 /************************************************DEBUG***************************************************************************/
-    log::debug!("Incentive: {:?}", &incentive);
-    log::debug!("Incentive for index {:?}: {:?}", DEBUG_UID, &incentive[DEBUG_UID]);
-    log::debug!("Incentive SUM: {:?}", incentive.iter().sum::<I32F32>());
+    log::debug!("Incentive: {:?}", &incentive);        
+    log::debug!("Incentive SUM: {:?}, Count: {:?}", incentive.iter().sum::<I32F32>(), &incentive.clone().into_iter().filter(|v| *v > zero_num).collect::<Vec<I32F32>>().len());
 /*********************************************************************************************************************************/
     // =========================
     // == Bonds and Dividends ==
@@ -243,18 +246,14 @@ async fn main() {
     inplace_col_normalize_sparse(&mut bonds_delta, n); // sum_i b_ij = 1
     log::trace!("ΔB (norm): {:?}", &bonds_delta);
 /************************************************DEBUG***************************************************************************/
-    log::debug!("Bonds Delta list Index: {:?}", DEBUG_UID);
-    // for (index, vec) in bonds_delta.iter().enumerate() {            
+    // log::debug!("Bonds Delta list Index: {:?}", DEBUG_UID);
+    // for (index, vec )in bonds_delta.iter().enumerate() {            
     //     for (uid, val) in vec {
-    //         if *uid as usize == DEBUG_UID {
-    //             log::debug!("BONDS DELTA : {:?} , {:?}", index, (uid, val));
+    //         if *uid ==96 {
+    //             log::debug!("BONDS DELTA  {:?}", (index, uid, val, active_stake[index]));
     //         }
     //     }
     // }           
-    // for val in &bonds_delta[DEBUG_UID] {            
-        // log::debug!("BONDS DELTA  {:?}", val);
-    // }           
-
     // log::debug!("SUM Bonds Delta Index {:?}: {:?}", DEBUG_UID, &bonds_delta[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
 /*********************************************************************************************************************************/
 
@@ -265,18 +264,18 @@ async fn main() {
     inplace_col_normalize_sparse(&mut ema_bonds, n); // sum_i b_ij = 1
     log::trace!("Exponential Moving Average Bonds: {:?}", &ema_bonds);
 /************************************************DEBUG***************************************************************************/
-    log::debug!("EMA bonds list Index: {:?}", DEBUG_UID);
-    // for (index, vec) in ema_bonds.iter().enumerate() {            
-    //     for (uid, val) in vec {
-    //         if *uid as usize == DEBUG_UID {
-    //             log::debug!("EMA bond : {:?} , {:?}", index, (uid, val));
-    //         }
-    //     }
-    // }           
-    for val in &ema_bonds[DEBUG_UID] {            
-        log::debug!("EMA BONDS  {:?}", val);
+    log::debug!("EMA bonds list Index: {:?} -- Incentive", DEBUG_UID);
+    let mut sum_ema = zero_num;
+    let mut sum_incentive = zero_num;
+    let mut count = 0;
+    for (uid, val) in &ema_bonds[DEBUG_UID] {            
+        log::debug!("EMA BONDS ({:?}, {:?}) -- {:?}", uid, val, incentive[*uid as usize]);
+        sum_ema += val;
+        sum_incentive += incentive[*uid as usize];
+        count +=1;
     }           
-    // log::debug!("SUM EMA bonds Index {:?}: {:?}", DEBUG_UID, &ema_bonds[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
+    log::debug!("Sum ema:{:?} , incentive:{:?}, count:{:?}", sum_ema, sum_incentive, count);
+    log::debug!("SUM EMA bonds Index {:?}: {:?}", DEBUG_UID, &ema_bonds[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>());
 /*********************************************************************************************************************************/
     // Compute dividends: d_i = SUM(j) b_ij * inc_j.
     // range: I32F32(0, 1)
@@ -286,14 +285,112 @@ async fn main() {
 
 }
 
-fn get_weight_for_uid(uid: usize, weights: &Vec<Vec<(u16, I32F32)>>, stake: &Vec<I32F32>, n: u16) -> I32F32 {
-    let ranks = matmul_sparse(&weights, &stake, n);    
-    let stake_num = stake[uid].to_bits();     
-    let sum_rank = ranks.iter().sum::<I32F32>().to_bits();         
-    let weight =   stake_num*sum_rank / (I32F32::from_num(1.0).to_bits()-stake_num);    
-    log::debug!("-----------------{:?} * {:?} = {:?} ",stake_num, sum_rank, weight);
-    log::debug!("-----------------{:?} * {:?} = {:?} ",I32F32::from_bits(stake_num), I32F32::from_bits(sum_rank), I32F32::from_bits(weight));
-    return I32F32::from_bits(weight);
+fn adjust_weights_for_uid(uid: usize, weights:&mut Vec<Vec<(u16, I32F32)>>, stake: &Vec<I32F32>, n: u16) {
+
+    // const TEST_UID: u16 = 153;
+
+    let zero_num = I32F32::from_num(0.0);
+
+    for row in &mut *weights {                
+            row.iter_mut()
+                .for_each(|(_j, val)| *val = val.saturating_mul(I32F32::from_num(10000)))
+                
+    }
+    // let sum_stake = stake.iter().sum::<I32F32>().to_num::<f64>();
+
+    let ranks = matmul_sparse(&weights, &stake, n); 
+    // let sum_rank = ranks.iter().sum::<I32F32>().to_num::<f64>();         
+   
+    let mut incentive = ranks.clone();
+    inplace_normalize(&mut incentive); // range: I32F32(0, 1)
+    // log::debug!("{:?}", incentive);
+    let bonds_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)    
+    // inplace_col_normalize_sparse(&mut temp_delta, n); // sum_i b_ij = 1
+
+    // let temp_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)  
+    // let mut temp_sum: I32F32 = zero_num;
+    // for (index, vec )in temp_delta.iter().enumerate() {            
+    //     for (j, val) in vec {
+    //         if *j == TEST_UID {
+    //             temp_sum = temp_sum.saturating_add(*val);
+    //             log::debug!("BONDS DELTA  {:?}", (index, j, val, stake[index]));
+    //         }
+    //     }
+    // }           
+    // log::debug!("SUM  {:?}", (temp_sum));
+
+    let mut weights_list: Vec<I32F32> = vec![zero_num; n as usize];
+    for (j, val) in &weights[uid] {
+        weights_list[*j as usize] = *val;
+    }
+    
+     weights[uid].clear();
+
+    let mut col_sum: Vec<I32F32> = vec![zero_num; n as usize]; // assume square matrix, rows=cols
+    for sparse_row in bonds_delta.iter() {
+        for (j, value) in sparse_row.iter() {
+            col_sum[*j as usize] = col_sum[*j as usize].saturating_add(*value);
+        }
+    }
+    let mut diff_stake_list: Vec<f64> = vec![0.0; n as usize];
+    for (j, val) in weights_list.iter().enumerate() {
+        
+        let val_f64 = val.to_num::<f64>();
+        let incentive_value = incentive[j].to_num::<f64>();
+        // let rank_value = ranks[j].to_num::<f64>();
+        let col_sum_value = col_sum[j].to_num::<f64>();
+        let stake_value = stake[uid].to_num::<f64>();
+        
+        if val_f64 > 0.0 {
+            // let weight_value = (incentive_value * col_sum_value) /(stake_value * (1.0-incentive_value));
+            let weight_value = (incentive_value * col_sum_value) / stake_value ;
+            // let weight_value = (rank_value * col_sum_value) /(stake_value * (sum_rank-rank_value));
+            diff_stake_list[j] =  (val_f64 - weight_value) * stake_value;
+            weights[uid].push((j as u16, I32F32::from_num(weight_value)));
+        }
+
+    }
+
+    // let  use_stake: Vec<I32F32> = stake.iter().copied().filter(|&s| s > zero_num).collect();
+    // let  count_stake = (use_stake.len()-1) as f64;
+
+    // for w_index in 0..n as usize{
+    //     if w_index != uid && stake[w_index] > zero_num {
+            for (diff_index, diff_val) in diff_stake_list.iter().enumerate() {
+                    'w_loop: for w_index in 0..n as usize {
+                        if stake[w_index] > zero_num {
+                            for vec in weights[w_index].iter_mut() {
+                                let new_val = vec.1.to_num::<f64>() + diff_val/stake[w_index].to_num::<f64>();
+                                if vec.0 == diff_index as u16 && new_val > zero_num {
+                                    vec.1 = I32F32::from_num(new_val);
+                                    break 'w_loop;
+                                }
+                            }
+                        }
+                    }
+            }
+    //     }
+    // }
+            
+
+    // temp_sum = zero_num;
+    // let temp_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)  
+    // for (index, vec )in temp_delta.iter().enumerate() {            
+    //     for (j, val) in vec {
+    //         if *j == TEST_UID {
+    //             temp_sum = temp_sum.saturating_add(*val);
+    //             log::debug!("BONDS DELTA  {:?}", (index, j, val, stake[index]));
+    //         }
+    //     }
+    // }           
+    // log::debug!("SUM  {:?}", (temp_sum));
+
+
+    // let stake_num = stake[uid].to_bits();     
+    // let sum_rank = ranks.iter().sum::<I32F32>().to_bits();         
+    // let weight =   stake_num*sum_rank / (I32F32::from_num(1.0).to_bits()-stake_num);    
+    // log::debug!("-----------------{:?} * {:?} = {:?} ",stake_num, sum_rank, weight);
+    // log::debug!("-----------------{:?} * {:?} = {:?} ",I32F32::from_bits(stake_num), I32F32::from_bits(sum_rank), I32F32::from_bits(weight));
 }
 
 async fn get_float_kappa(api: &Api<AssetRuntimeConfig, JsonrpseeClient>, netuid: u16) -> I32F32 {
