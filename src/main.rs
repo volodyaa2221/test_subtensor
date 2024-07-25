@@ -354,23 +354,19 @@ fn adjust_weights_for_uid(uid: usize, weights:&mut Vec<Vec<(u16, I32F32)>>, stak
     // let  use_stake: Vec<I32F32> = stake.iter().copied().filter(|&s| s > zero_num).collect();
     // let  count_stake = (use_stake.len()-1) as f64;
 
-    // for w_index in 0..n as usize{
-    //     if w_index != uid && stake[w_index] > zero_num {
-            for (diff_index, diff_val) in diff_stake_list.iter().enumerate() {
-                    'w_loop: for w_index in 0..n as usize {
-                        if stake[w_index] > zero_num {
-                            for vec in weights[w_index].iter_mut() {
-                                let new_val = vec.1.to_num::<f64>() + diff_val/stake[w_index].to_num::<f64>();
-                                if vec.0 == diff_index as u16 && new_val > zero_num {
-                                    vec.1 = I32F32::from_num(new_val);
-                                    break 'w_loop;
-                                }
-                            }
+    for (diff_index, diff_val) in diff_stake_list.iter().enumerate() {
+            'w_loop: for w_index in 0..n as usize {
+                if stake[w_index] > zero_num && w_index != uid{
+                    for vec in weights[w_index].iter_mut() {
+                        let new_val = vec.1.to_num::<f64>() + diff_val/stake[w_index].to_num::<f64>();
+                        if vec.0 == diff_index as u16 && new_val > zero_num {
+                            vec.1 = I32F32::from_num(new_val);
+                            break 'w_loop;
                         }
                     }
+                }
             }
-    //     }
-    // }
+    }
             
 
     // temp_sum = zero_num;
