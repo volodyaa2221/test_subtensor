@@ -155,18 +155,43 @@ async fn main() {
     let kappa: I32F32 = get_float_kappa(&api, NET_UID).await; // consensus majority ratio, e.g. 51%.
     let consensus: Vec<I32F32> = weighted_median_col_sparse(&active_stake, &weights, n, kappa);
     log::trace!("Consensus: {:?}", &consensus);
+/************************************************DEBUG***************************************************************************/
+    let mut weights_list: Vec<I32F32> = vec![zero_num; n as usize];
+    for (j, val) in &weights[DEBUG_UID] {
+        weights_list[*j as usize] = *val;
+    }
 
+    log::debug!("Weights 142 ----- Consensus");
+    for (index, value) in weights_list.iter().enumerate() {
+        log::debug!("Weights[142] {:?} ----- {:?}", (index, value), consensus[index]);
+    }
+
+    log::debug!("Weight Sum: {:?} , Consensus Sum: {:?}", weights_list.iter().sum::<I32F32>(), consensus.iter().sum::<I32F32>());
+ 
+/*********************************************************************************************************************************/    
     weights = col_clip_sparse(&weights, &consensus);
     log::trace!("Weights: {:?}", &weights);
 
 /************************************************DEBUG***************************************************************************/
+    
+
+    for (j, val) in &weights[DEBUG_UID] {
+        weights_list[*j as usize] = *val;
+    }
+
+    log::debug!("Weights 142 ----- Consensus");
+    for (index, value) in weights_list.iter().enumerate() {
+        log::debug!("Weights[142] {:?} ----- {:?}", (index, value), consensus[index]);
+    }
+    log::debug!("Weight Sum: {:?} , Consensus Sum: {:?}", weights_list.iter().sum::<I32F32>(), consensus.iter().sum::<I32F32>());
+
     // log::debug!("Weights list Index: {:?}", DEBUG_UID);
     // for vec in &weights[DEBUG_UID] {            
     //     log::debug!("{:?}", vec);        
     // }
     // log::debug!("SUM Weights Index {:?}: {:?}, Count:{:?}", DEBUG_UID, &weights[DEBUG_UID].iter().map(|v| v.1).sum::<I32F32>(), &weights[DEBUG_UID].len());
 
-    adjust_weights_for_uid(DEBUG_UID, &mut weights, &active_stake, n);
+    // adjust_weights_for_uid(&api, NET_UID, DEBUG_UID, &mut weights, &active_stake, &last_update, &block_at_registration, &consensus, n).await;
     
 
     // for (index, val) in active_stake.iter().enumerate() {
@@ -280,44 +305,77 @@ async fn main() {
     // Compute dividends: d_i = SUM(j) b_ij * inc_j.
     // range: I32F32(0, 1)
     let mut dividends: Vec<I32F32> = matmul_transpose_sparse(&ema_bonds, &incentive);
+    log::debug!("Dividends: {:?}", &dividends);
+    log::debug!("Dividend: {:?}", &dividends[DEBUG_UID]);
+
     inplace_normalize(&mut dividends);
-    log::trace!("Dividends: {:?}", &dividends);
+    log::debug!("Dividends: {:?}", &dividends);
+    log::debug!("Dividend: {:?}", &dividends[DEBUG_UID]);
 
 }
 
-fn adjust_weights_for_uid(uid: usize, weights:&mut Vec<Vec<(u16, I32F32)>>, stake: &Vec<I32F32>, n: u16) {
+#[allow(dead_code)]
+async fn adjust_weights_for_uid(
+    api: &Api<AssetRuntimeConfig, JsonrpseeClient>, 
+    netuid: u16,
+    uid: usize, 
+    weights:&mut Vec<Vec<(u16, I32F32)>>, 
+    stake: &Vec<I32F32>,
+    last_update: &[u64],
+    block_at_registration: &[u64],    
+    consensus: &Vec<I32F32>, 
+    n: u16) {
 
-    // const TEST_UID: u16 = 153;
+    const TEST_UID: u16 = 22;
+    let alpha = get_alpha_value(api, netuid, uid, consensus).await;
+    let alpha_f64 = alpha.to_num::<f64>();
+    
+    let one_minus_alpha: I32F32 = I32F32::from_num(1.0).saturating_sub(alpha);
+    let one_minus_alpha_f64 = one_minus_alpha.to_num::<f64>();
 
     let zero_num = I32F32::from_num(0.0);
+        log::debug!("alpha, one minus alpha, {:?}", (alpha_f64, one_minus_alpha_f64));
+    // for row in &mut *weights {                
+    //         row.iter_mut()
+    //             .for_each(|(_j, val)| *val = val.saturating_mul(I32F32::from_num(10000)))                
+    // }    
 
-    for row in &mut *weights {                
-            row.iter_mut()
-                .for_each(|(_j, val)| *val = val.saturating_mul(I32F32::from_num(10000)))
-                
-    }
-    // let sum_stake = stake.iter().sum::<I32F32>().to_num::<f64>();
-
-    let ranks = matmul_sparse(&weights, &stake, n); 
-    // let sum_rank = ranks.iter().sum::<I32F32>().to_num::<f64>();         
-   
-    let mut incentive = ranks.clone();
+    let mut incentive = matmul_sparse(&weights, &stake, n); 
+    // let sum_rank = ranks.iter().sum::<I32F32>().to_num::<f64>();                
     inplace_normalize(&mut incentive); // range: I32F32(0, 1)
-    // log::debug!("{:?}", incentive);
+    log::debug!("{:?}", incentive);
+
+    // Access network bonds.
+    let mut bonds: Vec<Vec<(u16, I32F32)>> = get_bonds(&api, netuid, n).await;
+    // Remove bonds referring to deregistered neurons.
+    bonds = vec_mask_sparse_matrix(
+        &bonds,
+        last_update,
+        block_at_registration,
+        &|updated, registered| updated <= registered,
+    );
+    // Normalize remaining bonds: sum_i b_ij = 1.
+    inplace_col_normalize_sparse(&mut bonds, n);
+
+    let mut bonds_list:Vec<I32F32> = vec![zero_num; n as usize];
+    for (j, val) in &bonds[uid] {
+        bonds_list[*j as usize] = *val;
+    }
+
     let bonds_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)    
     // inplace_col_normalize_sparse(&mut temp_delta, n); // sum_i b_ij = 1
 
-    // let temp_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)  
-    // let mut temp_sum: I32F32 = zero_num;
-    // for (index, vec )in temp_delta.iter().enumerate() {            
-    //     for (j, val) in vec {
-    //         if *j == TEST_UID {
-    //             temp_sum = temp_sum.saturating_add(*val);
-    //             log::debug!("BONDS DELTA  {:?}", (index, j, val, stake[index]));
-    //         }
-    //     }
-    // }           
-    // log::debug!("SUM  {:?}", (temp_sum));
+    let temp_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)  
+    let mut temp_sum: I32F32 = zero_num;
+    for (index, vec )in temp_delta.iter().enumerate() {            
+        for (j, val) in vec {
+            if *j == TEST_UID {
+                temp_sum = temp_sum.saturating_add(*val);
+                log::debug!("BONDS DELTA  {:?}", (index, j, val, stake[index]));
+            }
+        }
+    }           
+    log::debug!("SUM  {:?}", (temp_sum));
 
     let mut weights_list: Vec<I32F32> = vec![zero_num; n as usize];
     for (j, val) in &weights[uid] {
@@ -340,46 +398,53 @@ fn adjust_weights_for_uid(uid: usize, weights:&mut Vec<Vec<(u16, I32F32)>>, stak
         // let rank_value = ranks[j].to_num::<f64>();
         let col_sum_value = col_sum[j].to_num::<f64>();
         let stake_value = stake[uid].to_num::<f64>();
-        
-        if val_f64 > 0.0 {
+        let bonds_value = bonds_list[j].to_num::<f64>();
+        // if val_f64 > 0.0 {
             // let weight_value = (incentive_value * col_sum_value) /(stake_value * (1.0-incentive_value));
-            let weight_value = (incentive_value * col_sum_value) / stake_value ;
-            // let weight_value = (rank_value * col_sum_value) /(stake_value * (sum_rank-rank_value));
+            // let weight_value = (incentive_value * col_sum_value) / stake_value ;
+            let weight_value = col_sum_value * (incentive_value - one_minus_alpha_f64 *bonds_value) / alpha_f64*stake_value;     
+            // let weight_for_uid_f64 = (incentive_f64 * bond_delta_sum_f64
+            //     - (bond_f64 * one_minus_alpha_f64))
+            //     / active_stake_f64
+            //     * alpha_f64;
+   
             diff_stake_list[j] =  (val_f64 - weight_value) * stake_value;
             weights[uid].push((j as u16, I32F32::from_num(weight_value)));
-        }
+        // }
 
     }
 
     // let  use_stake: Vec<I32F32> = stake.iter().copied().filter(|&s| s > zero_num).collect();
     // let  count_stake = (use_stake.len()-1) as f64;
 
-    for (diff_index, diff_val) in diff_stake_list.iter().enumerate() {
-            'w_loop: for w_index in 0..n as usize {
-                if stake[w_index] > zero_num && w_index != uid{
-                    for vec in weights[w_index].iter_mut() {
-                        let new_val = vec.1.to_num::<f64>() + diff_val/stake[w_index].to_num::<f64>();
-                        if vec.0 == diff_index as u16 && new_val > zero_num {
-                            vec.1 = I32F32::from_num(new_val);
-                            break 'w_loop;
-                        }
-                    }
-                }
-            }
-    }
+    // for (diff_index, diff_val) in diff_stake_list.iter().enumerate() {
+    //         'w_loop: for w_index in 0..n as usize {
+    //             if stake[w_index] > zero_num && w_index != uid{
+    //                 for vec in weights[w_index].iter_mut() {
+    //                     let new_val = vec.1.to_num::<f64>() + diff_val/stake[w_index].to_num::<f64>();
+    //                     if vec.0 == diff_index as u16 && new_val > zero_num {
+    //                         vec.1 = I32F32::from_num(new_val);
+    //                         break 'w_loop;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    // }
             
 
-    // temp_sum = zero_num;
-    // let temp_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked)  
-    // for (index, vec )in temp_delta.iter().enumerate() {            
-    //     for (j, val) in vec {
-    //         if *j == TEST_UID {
-    //             temp_sum = temp_sum.saturating_add(*val);
-    //             log::debug!("BONDS DELTA  {:?}", (index, j, val, stake[index]));
-    //         }
-    //     }
-    // }           
-    // log::debug!("SUM  {:?}", (temp_sum));
+    temp_sum = zero_num;
+    let mut temp_delta: Vec<Vec<(u16, I32F32)>> = row_hadamard_sparse(&weights, &stake); // ΔB = W◦S (outdated W masked) 
+        inplace_col_normalize_sparse(&mut temp_delta, n); // sum_i b_ij = 1
+ 
+    for (index, vec )in temp_delta.iter().enumerate() {            
+        for (j, val) in vec {
+            if *j == TEST_UID {
+                temp_sum = temp_sum.saturating_add(*val);
+                log::debug!("BONDS DELTA  {:?}", (index, j, val, stake[index], bonds_list[*j as usize]));
+            }
+        }
+    }           
+    log::debug!("SUM  {:?}", (temp_sum));
 
 
     // let stake_num = stake[uid].to_bits();     
@@ -766,3 +831,66 @@ fn parse_weights_from_file(file_path: &str) -> Vec<Vec<(u16, I32F32)>> {
     return data;
 }
 
+#[allow(dead_code)]
+async fn get_alpha_value(
+    api: &Api<AssetRuntimeConfig, JsonrpseeClient>, 
+    netuid: u16, 
+    uid: usize, 
+    consensus: &Vec<I32F32> ) -> I32F32 {
+    let is_liquid_alpha_on = get_liquid_alpha_on(api, netuid).await;
+    if is_liquid_alpha_on
+        && !consensus.is_empty()
+        && consensus.iter().any(|&c| c != I32F32::from_num(0))
+    {
+        // Calculate the 75th percentile (high) and 25th percentile (low) of the consensus values.
+        let consensus_high = quantile(consensus, 0.75);
+        let consensus_low = quantile(consensus, 0.25);
+        // Further check if the high and low consensus values meet the required conditions.
+        if (consensus_high > consensus_low) || consensus_high != 0 || consensus_low < 0 {
+            // if (consensus_high > consensus_low) || consensus_high != 0) || consensus_low != 0 {
+            // if (consensus_high > consensus_low) || consensus_low != 0 {
+            log::trace!("Using Liquid Alpha");
+
+            // Get the high and low alpha values for the network.
+            let (alpha_low, alpha_high): (I32F32, I32F32) = get_alpha_values_32(api, netuid).await;
+            log::trace!("alpha_low: {:?} alpha_high: {:?}", alpha_low, alpha_high);
+
+            // Calculate the logistic function parameters 'a' and 'b' based on alpha and consensus values.
+            let (a, b) = calculate_logistic_params(
+                alpha_high,
+                alpha_low,
+                consensus_high,
+                consensus_low,
+            );
+
+            // Compute the alpha values using the logistic function parameters.
+            let alpha = compute_alpha_values(&consensus, a, b);
+
+            // Clamp the alpha values between alpha_high and alpha_low.
+            let clamped_alpha = clamp_alpha_values(alpha, alpha_high, alpha_low);
+
+            // Compute the Exponential Moving Average (EMA) of bonds using the clamped alpha values.
+            return clamped_alpha[uid];
+        } else {
+            log::trace!("Using Bonds Moving Average");
+            // Retrieve the bonds moving average for the given network ID and scale it down.
+            let bonds_moving_average: I64F64 = I64F64::from_num(get_bonds_moving_average(api, netuid).await)
+                .saturating_div(I64F64::from_num(1_000_000));
+
+            // Calculate the alpha value for the EMA calculation.
+            // Alpha is derived by subtracting the scaled bonds moving average from 1.            
+            I32F32::from_num(1).saturating_sub(I32F32::from_num(bonds_moving_average))            
+        }
+    } else {
+
+        log::trace!("Using Bonds Moving Average");
+
+        let bonds_moving_average: I64F64 = I64F64::from_num(get_bonds_moving_average(api, netuid).await)
+        .saturating_div(I64F64::from_num(1_000_000));
+        // Calculate the alpha value for the EMA calculation.
+        // Alpha is derived by subtracting the scaled bonds moving average from 1.
+        I32F32::from_num(1).saturating_sub(I32F32::from_num(bonds_moving_average))
+
+    }
+
+}

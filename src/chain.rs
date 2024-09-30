@@ -234,12 +234,12 @@ pub async fn get_bonds_moving_average (api: &Api<AssetRuntimeConfig, JsonrpseeCl
     let storage_value:Option<u64> = match api.get_storage_map ("SubtensorModule", "BondsMovingAverage", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            log::error!("Can't get LiquidAlphaOn {:?}", e);
+            log::error!("Can't get BondsMovingAverage {:?}", e);
             return 0;
         }
     };
 
-    return storage_value.unwrap_or(0);
+    return storage_value.unwrap_or(900000);
     
 }
 
@@ -248,7 +248,7 @@ pub async fn get_alpha_values (api: &Api<AssetRuntimeConfig, JsonrpseeClient>, n
     let storage_value:Option<(u16, u16)> = match api.get_storage_map ("SubtensorModule", "AlphaValues", netuid,  None).await {
         Ok(result) => { result },
         Err(e) => {
-            log::error!("Can't get LiquidAlphaOn {:?}", e);
+            log::error!("Can't get AlphaValues {:?}", e);
             return (0,0);
         }
     };
